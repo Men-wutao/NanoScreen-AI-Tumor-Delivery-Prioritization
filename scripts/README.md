@@ -2,6 +2,20 @@
 
 This folder contains the public code records and supplementary-file builders retained for the GitHub upload package.
 
+## Repository and Dashboard Links
+
+Paper analysis-code and supplementary-file repository:
+
+https://github.com/Men-wutao/NanoScreen-AI-Tumor-Delivery-Prioritization
+
+Dashboard implementation repository:
+
+https://github.com/Men-wutao/NanoScreen-AI-Dashboard
+
+Deployed dashboard:
+
+https://nanoscreen-ai-dashboard.streamlit.app/
+
 ## Cleaned Notebook Records
 
 - `main_analysis_final.py` is the manually organized final public analysis code exported from the finalized Jupyter workflow. It preserves the main analysis workflow, including preprocessing, group-aware splitting, label construction, model training and evaluation, OOF-based model selection, SHAP analysis, virtual candidate screening, cancer-type-specific screening, and local working-range estimation.
