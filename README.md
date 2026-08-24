@@ -10,6 +10,12 @@ This repository is prepared as the paper code and supplementary-file package for
 
 Model-prioritized candidates are computational outputs intended to guide future experimental validation. They are not experimentally validated optimal formulations.
 
+The updated virtual-screening output was generated from 50,000 virtual nanoparticle candidates using chemistry-aware categorical feasibility filtering, real-database Type-MAT-Shape combination constraints, numeric out-of-distribution filtering, CatBoost high-delivery probability ranking, and top-candidate prioritization. The updated scored library contains 46,157 final candidates and exports the top 200 candidates.
+
+## Repository Link
+
+https://github.com/Men-wutao/NanoScreen-AI-Tumor-Delivery-Prioritization
+
 ## Repository Structure
 
 ```text
@@ -50,7 +56,7 @@ The `supplementary/` folder contains the final supplementary materials prepared 
 - `Supplementary_Material.docx`: supplementary tables and supplementary data/code availability statement.
 - `Supplementary_Excel_File_A_dataset_and_labels.xlsx`: cleaned dataset, split labels, endpoint definitions, threshold sensitivity analysis, variable dictionary, variable ranges, and categorical levels.
 - `Supplementary_Excel_File_B_model_evaluation_outputs.xlsx`: model-evaluation outputs, cross-validation results, out-of-fold and independent test-set predictions, model reports, optimized hyperparameters, and ranking-oriented metrics.
-- `Supplementary_Excel_File_C_virtual_screening_outputs.xlsx`: virtual formulation screening outputs, scored candidates, top-ranked candidates, cancer-type-specific candidates, and local working-range outputs.
+- `Supplementary_Excel_File_C_virtual_screening_outputs.xlsx`: updated virtual formulation screening outputs from the 50,000-candidate workflow, including 46,157 scored candidates, top-ranked candidates, cancer-type-specific candidates, and local working-range outputs.
 
 The supplementary Excel and Word generation scripts in `scripts/` are retained for supplementary-file organization:
 
