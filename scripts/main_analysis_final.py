@@ -32609,6 +32609,7 @@ OOD_QUANTILE_SOURCE = globals().get("OOD_QUANTILE_SOURCE", "train")
 FEAS_ABS_RANGES = globals().get("FEAS_ABS_RANGES", {})
 FEAS_NONNEGATIVE_COLS = list(globals().get("FEAS_NONNEGATIVE_COLS", []))
 FEAS_INTEGER_COLS = list(globals().get("FEAS_INTEGER_COLS", []))
+FEAS_REQUIRE_TYPE_MAT_SHAPE = bool(globals().get("FEAS_REQUIRE_TYPE_MAT_SHAPE", True))
 FEAS_REQUIRE_SEEN_CAT_TUPLE = bool(globals().get("FEAS_REQUIRE_SEEN_CAT_TUPLE", False))
 FEAS_REQUIRE_SEEN_CAT_PAIRWISE = bool(globals().get("FEAS_REQUIRE_SEEN_CAT_PAIRWISE", False))
 
@@ -32680,6 +32681,7 @@ print("[APPLY_FEASIBILITY_FILTERS]     ", APPLY_FEASIBILITY_FILTERS)
 print("[APPLY_OOD_FILTERS]             ", APPLY_OOD_FILTERS)
 print("[OOD_Q_LOW]                     ", OOD_Q_LOW)
 print("[OOD_Q_HIGH]                    ", OOD_Q_HIGH)
+print("[FEAS_REQUIRE_TYPE_MAT_SHAPE]   ", FEAS_REQUIRE_TYPE_MAT_SHAPE)
 print("[EXPORT_PAPER_TABLES]           ", EXPORT_PAPER_TABLES)
 print("[ENABLE_CT_SUBTABLES]           ", ENABLE_CT_SUBTABLES)
 print("[CT_SUBTABLE_VALUES]            ", CT_SUBTABLE_VALUES)
@@ -33065,16 +33067,62 @@ elif CAT_SAMPLING == "train_uniform":
 else:
     raise ValueError("CAT_SAMPLING text train_empirical / high_empirical / train_uniform")
 
+def build_material_library(df_ref):
+    library = {}
+
+    library["Type_MAT"] = set(
+        df_ref[["Type", "MAT"]]
+        .fillna("<NA>")
+        .astype(str)
+        .itertuples(index=False, name=None)
+    )
+
+    library["MAT_Shape"] = set(
+        df_ref[["MAT", "Shape"]]
+        .fillna("<NA>")
+        .astype(str)
+        .itertuples(index=False, name=None)
+    )
+
+    library["Type_MAT_Shape"] = set(
+        df_ref[["Type", "MAT", "Shape"]]
+        .fillna("<NA>")
+        .astype(str)
+        .itertuples(index=False, name=None)
+    )
+
+    return library
+
+def sample_material_categories(library, n):
+    combos = list(library["Type_MAT_Shape"])
+    if len(combos) == 0:
+        raise ValueError("No observed Type-MAT-Shape combinations are available for sampling.")
+
+    idx = rng.choice(len(combos), size=n, replace=True)
+    arr = [combos[i] for i in idx]
+
+    return pd.DataFrame(arr, columns=["Type", "MAT", "Shape"])
+
+material_library = build_material_library(df_train)
+
 candidates = pd.DataFrame(index=np.arange(N_CANDIDATES))
 
 for c in NUM_COLS_USE:
     candidates[c] = sample_continuous_from_high(df_high, c, N_CANDIDATES, mode=CONT_SAMPLING)
 
-for c in CAT_COLS_USE:
+material_df = sample_material_categories(material_library, N_CANDIDATES)
+for c in ["Type", "MAT", "Shape"]:
+    if c in CAT_COLS_USE:
+        candidates[c] = material_df[c]
+
+other_cat_cols = [c for c in CAT_COLS_USE if c not in ["Type", "MAT", "Shape"]]
+for c in other_cat_cols:
     candidates[c] = sample_categorical_indep(cat_source, c, N_CANDIDATES, mode=cat_mode)
 
 dedup_cols = [c for c in (NUM_COLS_USE + CAT_COLS_USE) if c in candidates.columns]
 candidates = candidates.drop_duplicates(subset=dedup_cols).reset_index(drop=True)
+
+n_candidates_after_deduplication = int(len(candidates))
 
 print("[Candidates after generation + dedup]", candidates.shape)
 
@@ -33124,6 +33172,25 @@ def apply_filters(df_cand: pd.DataFrame):
     dfc = df_cand.copy()
     mask = np.ones(len(dfc), dtype=bool)
     report = {"n_in": int(len(dfc)), "dropped": {}}
+
+    if FEAS_REQUIRE_TYPE_MAT_SHAPE:
+        required_cols = {"Type", "MAT", "Shape"}
+        if not required_cols.issubset(dfc.columns):
+            missing = sorted(required_cols - set(dfc.columns))
+            raise KeyError(f"Missing Type-MAT-Shape feasibility columns: {missing}")
+
+        allowed_combo = material_library["Type_MAT_Shape"]
+        combos = list(
+            zip(
+                dfc["Type"].astype(str),
+                dfc["MAT"].astype(str),
+                dfc["Shape"].astype(str),
+            )
+        )
+        m = np.array([x in allowed_combo for x in combos], dtype=bool)
+        before = mask.sum()
+        mask &= m
+        report["chemical_Type_MAT_Shape"] = int(before - mask.sum())
 
     if APPLY_FEASIBILITY_FILTERS and FEAS_ABS_RANGES:
         for col, (lo, hi) in FEAS_ABS_RANGES.items():
@@ -33870,11 +33937,15 @@ meta = {
     "pos_rate_train": float(df_train["_y_high_"].mean()),
 
     "n_candidates_requested": int(N_CANDIDATES),
+    "n_candidates_after_deduplication": int(n_candidates_after_deduplication),
     "n_candidates_after_dedup_and_filters": int(len(candidates_scored)),
     "filter_report": filter_report,
 
     "cont_sampling": CONT_SAMPLING,
     "cat_sampling": CAT_SAMPLING,
+    "type_mat_shape_sampling": "joint sampling from observed real-database Type-MAT-Shape combinations",
+    "type_mat_shape_constraints": bool(FEAS_REQUIRE_TYPE_MAT_SHAPE),
+    "n_observed_type_mat_shape_combinations": int(len(material_library["Type_MAT_Shape"])),
     "q_low": Q_LOW,
     "q_high": Q_HIGH,
     "ood_q_low": OOD_Q_LOW,
@@ -33919,6 +33990,8 @@ meta = {
     "notes": {
         "pred_score": "The predicted probability of belonging to the high-delivery class, used as the primary screening score.",
         "no_novelty_score": "Novelty score and dual-channel recommendation were removed in this version.",
+        "candidate_generation": "Type, MAT, and Shape are sampled jointly from Type-MAT-Shape combinations observed in the real database; other categorical variables are sampled from the empirical training distribution.",
+        "chemical_feasibility": "Generated candidates are filtered by observed real-database Type-MAT-Shape combinations before OOD filtering and model scoring.",
         "size_input": "The model internally uses log10(Size), whereas Size local intervals are estimated and displayed in nm space.",
         "candidate_level_local_interval": "For each candidate, other variables are fixed and one continuous variable is locally perturbed. The interval is the range in which predicted high-delivery probability remains above the predefined stability criterion.",
         "condition_specific_table": "Cancer-type-specific tables are generated by filtering CT, e.g., CT=Breast.",
